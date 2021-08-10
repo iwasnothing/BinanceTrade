@@ -191,7 +191,7 @@ func searchPrices(sym string, n int64) []float64  {
 	}
 	return prices	
 }
-func getSignal(ys []float64, xs []float64, lookback int, beta float64, intercept float64) int {
+func getSignal(ys, xs, p0, p1  []float64, lookback int, beta float64, intercept float64) int {
 	N := len(ys)
         res := make([]float64, N-1)
         for k := 1; k < N   ; k++ {
@@ -203,10 +203,10 @@ func getSignal(ys []float64, xs []float64, lookback int, beta float64, intercept
         sd = math.Sqrt(sd)
         //fmt.Println("signal",current_res,sd)
 	mid := int(N/2)
-        ymean_long := stat.Mean(ys[1:mid],nil)
-        ymean_short := stat.Mean(ys[mid:N],nil)
-        xmean_long := stat.Mean(xs[1:mid],nil)
-        xmean_short := stat.Mean(xs[mid:N],nil)
+        ymean_long := stat.Mean(p0[1:mid],nil)
+        ymean_short := stat.Mean(p0[mid:N],nil)
+        xmean_long := stat.Mean(p1[1:mid],nil)
+        xmean_short := stat.Mean(p1[mid:N],nil)
 
         ymm := ymean_short - ymean_long
         xmm := xmean_short - xmean_long
@@ -237,7 +237,7 @@ func doTrade() {
 	if len(r1) >= int(lookback) && len(r2) >= int(lookback) {
 		beta := MyState.Beta
 		intercept := MyState.Intercept
-		sig := getSignal(r1,r2, int(lookback), beta, intercept)
+		sig := getSignal(r1,r2,s1,s2, int(lookback), beta, intercept)
 		fmt.Println("signal",sig)
 		PL := execOrder(sig)
 		fmt.Println(MyState,PL)
