@@ -10,6 +10,9 @@ import (
 	"math"
 	"sync"
 	"gonum.org/v1/gonum/stat"
+        "gonum.org/v1/plot"
+        "gonum.org/v1/plot/plotter"
+        "gonum.org/v1/plot/vg"
 	"github.com/sajari/regression"
 	"github.com/adam-hanna/adf"
 	"github.com/adshao/go-binance/v2"	
@@ -59,6 +62,64 @@ func GetAssetID(sym string) int {
 	} else {
 		return -1
 	}
+}
+func saveLineChart(acc []float64, asset string) {
+        pts := make(plotter.XYs, len(acc) )
+        for i,val := range acc {
+            pt := plotter.XY{X:float64(i),Y:val}
+            pts[i] = pt
+        }
+        line, _ := plotter.NewLine(pts)
+        scatter, _ := plotter.NewScatter(pts)
+        p := plot.New()
+        p.Title.Text = "PL "+asset
+        p.Add(line, scatter)
+        p.Save(3*vg.Inch,3*vg.Inch,"PL-"+asset+".png")
+}
+func accuPL(PL []float64) []float64 {
+        N := len(PL)
+        acc := make([]float64, N)
+        for i,p := range PL {
+            if i == 0 {
+                acc[0] = PL[0]
+            } else {
+                acc[i] = (acc[i-1] + p)
+            }
+        }
+        return acc
+}
+func saveHist(res []float64,asset string) {
+        var values plotter.Values
+        for _,r := range res {
+            values = append(values, r)
+        }
+        p := plot.New()
+        p.Title.Text = "Residual Histogram"
+        hist, herr := plotter.NewHist(values,20)
+        if herr != nil {
+            fmt.Println("plot hist error",herr)
+            return
+        }
+        p.Add(hist)
+        p.Save(3*vg.Inch,3*vg.Inch,"hist-"+asset+".png")
+
+}
+func plotLR(ys,xs []float64, intercept,beta float64 ) {
+        pts := make(plotter.XYs, len(xs) )
+        LRs := make(plotter.XYs, len(xs) )
+        for i,val := range xs {
+            pt := plotter.XY{X:val,Y:ys[i]}
+            y := intercept + beta*val
+            lr := plotter.XY{X:val,Y:y}
+            pts[i] = pt
+            LRs[i] = lr
+        }
+        line, _ := plotter.NewLine(LRs)
+        scatter, _ := plotter.NewScatter(pts)
+        p := plot.New()
+        p.Title.Text = "intercept="+strconv.FormatFloat(intercept, 'g', -1,64) + " , beta="+strconv.FormatFloat(beta,'g',-1,64)
+        p.Add(line, scatter)
+        p.Save(3*vg.Inch,3*vg.Inch,"LR.png")
 }
 func checkNaN(x []float64) bool {
 	for _,v := range x {
@@ -139,21 +200,26 @@ func sumPL(sym string) float64  {
 	    fmt.Println(err)
 	}
 	var totalPL float64 = 0
-	for _,p := range PLs {
+	prices := make([]float64,len(PLs) )
+	for i,p := range PLs {
 		switch v := p["PL"].(type) {
 		case float64:
 			totalPL += v
+			prices[i] = v
 		case string:
 			f,_ := strconv.ParseFloat(v,64)	
 			totalPL += f
+			prices[i] = f
 		case int:
 			totalPL += float64(v)
+			prices[i] = float64(v)
 		default:
 			fmt.Println("unknown close type")
 		}
 		//fmt.Println(prices[i])
 	
 	}
+	saveLineChart(accuPL(prices),"ETHBTC")
 	return totalPL	
 }
 func searchPrices(sym string, n int64) []float64  {
@@ -290,6 +356,8 @@ func tuneParm() {
 	n := MinInt(len(r1),len(r2))
 	if len(r1) >= 10 && len(r2) >= 10 {
 		intercept,beta,res := runLR(r1[0:n],r2[0:n])
+		plotLR(r1[0:n],r2[0:n],intercept,beta)
+		saveHist(res,"ETHBTC")
 		isCoint := runADF(res)
 		fmt.Println("Parms:",intercept,beta,isCoint,getRMS(res))
 		MyStateMu.Lock()
